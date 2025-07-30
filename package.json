@@ -24,13 +24,14 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0",
     "@distube/ytdl-core": "^4.16.12",
+    "dotenv": "^16.3.1",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
     "fs-extra": "^11.2.0",
+    "node-telegram-bot-api": "^0.64.0",
     "path": "^0.12.7",
-    "dotenv": "^16.3.1"
+    "youtube-dl-exec": "^3.0.22"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

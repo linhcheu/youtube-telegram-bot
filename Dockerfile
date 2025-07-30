@@ -1,13 +1,15 @@
 # Use Node.js 20 LTS Alpine for better compatibility with ytdl-core
 FROM node:20-alpine
 
-# Install system dependencies for ffmpeg and python (for building native modules)
+# Install system dependencies for ffmpeg, yt-dlp and python (for building native modules)
 RUN apk add --no-cache \
     ffmpeg \
     python3 \
+    py3-pip \
     make \
     g++ \
-    git
+    git \
+    && pip3 install --break-system-packages yt-dlp
 
 # Set working directory
 WORKDIR /app
