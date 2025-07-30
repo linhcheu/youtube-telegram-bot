@@ -1,0 +1,32 @@
+{
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git"
+    },
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "MAX_FILE_SIZE_MB": {
+      "value": "50"
+    },
+    "DOWNLOAD_DIR": {
+      "value": "./downloads"
+    },
+    "DEBUG": {
+      "value": "false"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": []
+}

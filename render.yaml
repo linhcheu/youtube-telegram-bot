@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: youtube-telegram-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MAX_FILE_SIZE_MB
+        value: 50
+      - key: DOWNLOAD_DIR
+        value: ./downloads
+      - key: DEBUG
+        value: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false

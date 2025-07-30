@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  youtube-bot:
+    build: .
+    container_name: youtube-telegram-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-50}
+      - DOWNLOAD_DIR=${DOWNLOAD_DIR:-./downloads}
+      - DEBUG=${DEBUG:-false}
+      - NODE_ENV=production
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Bot is running')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
