@@ -25,12 +25,20 @@ if (!isProduction && !fs.existsSync(envPath)) {
     process.exit(1);
 }
 
-// Check if bot token is provided
-if (!process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN === 'your_bot_token_here') {
-    console.error('❌ Please set your Telegram bot token in the .env file');
-    console.log('📝 Get your token from @BotFather on Telegram');
+// Check if bot token is provided (use BOT_TOKEN for Railway, TELEGRAM_BOT_TOKEN for backward compatibility)
+const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+if (!botToken || botToken === 'your_bot_token_here') {
+    console.error('❌ Please set your Telegram bot token');
+    console.log('📝 Set BOT_TOKEN environment variable with your token from @BotFather');
+    if (!isProduction) {
+        console.log('📝 For local development, add it to your .env file:');
+        console.log('   BOT_TOKEN=your_bot_token_here');
+    }
     process.exit(1);
 }
+
+// Set the bot token for the bot module
+process.env.TELEGRAM_BOT_TOKEN = botToken;
 
 // Add HTTP server for health checks (required by most hosting platforms)
 const http = require('http');

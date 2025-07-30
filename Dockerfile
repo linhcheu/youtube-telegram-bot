@@ -37,22 +37,8 @@ COPY .env.example ./.env.example
 RUN mkdir -p downloads logs \
     && chmod 755 downloads logs
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs \
-    && adduser -S botuser -u 1001 -G nodejs
-
-# Set proper ownership
-RUN chown -R botuser:nodejs /app
-
-# Switch to non-root user
-USER botuser
-
 # Expose port (Railway will use this)
 EXPOSE 3000
-
-# Health check for Railway
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
 
 # Start command
 CMD ["npm", "start"]
