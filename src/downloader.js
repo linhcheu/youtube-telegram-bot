@@ -3,6 +3,20 @@ const fs = require('fs-extra');
 const path = require('path');
 const { sanitizeFilename } = require('./utils');
 
+// Create agent with better configuration
+const agent = ytdl.createAgent([
+    {
+        "name": "VISITOR_INFO1_LIVE",
+        "value": "st_viewed_video_page",
+        "domain": ".youtube.com",
+        "path": "/",
+        "expires": -1,
+        "httpOnly": false,
+        "secure": true,
+        "sameSite": "None"
+    }
+]);
+
 /**
  * Get video information from YouTube URL
  */
@@ -10,33 +24,67 @@ async function getVideoInfo(url) {
     try {
         console.log('Getting video info for:', url);
         
-        // Add retry mechanism with different options
+        // Try multiple approaches with different configurations
+        const attempts = [
+            // Attempt 1: With custom agent and headers
+            {
+                agent,
+                requestOptions: {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'DNT': '1',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1'
+                    }
+                }
+            },
+            // Attempt 2: Different User-Agent
+            {
+                requestOptions: {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                }
+            },
+            // Attempt 3: Mobile User-Agent
+            {
+                requestOptions: {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+                    }
+                }
+            },
+            // Attempt 4: Basic attempt
+            {}
+        ];
+        
         let info;
         let lastError;
         
-        // Try with different options
-        const options = [
-            {},
-            { requestOptions: { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } } },
-            { requestOptions: { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' } } }
-        ];
-        
-        for (const option of options) {
+        for (let i = 0; i < attempts.length; i++) {
             try {
-                info = await ytdl.getInfo(url, option);
+                console.log(`Attempt ${i + 1}/${attempts.length}...`);
+                info = await ytdl.getInfo(url, attempts[i]);
+                console.log('✅ Successfully got video info:', info.videoDetails.title);
                 break;
             } catch (error) {
                 lastError = error;
-                console.log(`Attempt failed, trying next option...`);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+                console.log(`❌ Attempt ${i + 1} failed:`, error.message);
+                
+                // Wait between attempts
+                if (i < attempts.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             }
         }
         
         if (!info) {
-            throw lastError || new Error('Failed to get video info');
+            console.error('All attempts failed. Last error:', lastError?.message);
+            return null;
         }
-        
-        console.log('Successfully got video info:', info.videoDetails.title);
         
         return {
             title: info.videoDetails.title || 'Unknown Title',
@@ -51,8 +99,7 @@ async function getVideoInfo(url) {
             uploadDate: info.videoDetails.uploadDate || ''
         };
     } catch (error) {
-        console.error('Error getting video info:', error.message);
-        console.error('Full error:', error);
+        console.error('Critical error getting video info:', error.message);
         return null;
     }
 }
@@ -72,38 +119,70 @@ async function downloadVideo(url, downloadDir, title, format = 'mp4', progressCa
             // Ensure download directory exists
             await fs.ensureDir(downloadDir);
 
-            // Get video info to select best quality
+            // Get video info with retry mechanism
             let info;
-            try {
-                info = await ytdl.getInfo(url, {
-                    requestOptions: { 
-                        headers: { 
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            const getInfoOptions = [
+                {
+                    agent,
+                    requestOptions: {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': '*/*',
+                            'Accept-Language': 'en-US,en;q=0.9',
+                            'Connection': 'keep-alive'
                         }
                     }
-                });
-            } catch (error) {
-                console.error('Failed to get video info for download:', error.message);
-                throw new Error('Unable to access video. It may be private, deleted, or region-blocked.');
+                },
+                {
+                    requestOptions: {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        }
+                    }
+                }
+            ];
+            
+            let lastError;
+            for (const option of getInfoOptions) {
+                try {
+                    info = await ytdl.getInfo(url, option);
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    console.log('Retrying with different options...');
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            
+            if (!info) {
+                throw new Error(`Unable to access video: ${lastError?.message || 'Unknown error'}`);
             }
             
             let videoFormat;
             
             if (format === 'mp4') {
                 // For MP4, try to get the best quality with both video and audio
-                const formats = info.formats.filter(f => f.hasVideo && f.hasAudio && f.container === 'mp4');
+                const formats = info.formats.filter(f => f.hasVideo && f.hasAudio);
                 if (formats.length > 0) {
-                    videoFormat = formats.reduce((best, current) => {
-                        const bestHeight = parseInt(best.height) || 0;
-                        const currentHeight = parseInt(current.height) || 0;
-                        return currentHeight > bestHeight ? current : best;
-                    });
+                    // Sort by quality and prefer mp4 container
+                    videoFormat = formats
+                        .filter(f => f.container === 'mp4')
+                        .sort((a, b) => {
+                            const aHeight = parseInt(a.height) || 0;
+                            const bHeight = parseInt(b.height) || 0;
+                            return bHeight - aHeight;
+                        })[0] || formats[0];
                 } else {
                     // Fallback to any format with video and audio
-                    videoFormat = ytdl.chooseFormat(info.formats, { 
-                        quality: 'highest',
-                        filter: 'audioandvideo'
-                    });
+                    try {
+                        videoFormat = ytdl.chooseFormat(info.formats, { 
+                            quality: 'highest',
+                            filter: 'audioandvideo'
+                        });
+                    } catch (err) {
+                        // If that fails, try highest quality regardless
+                        videoFormat = ytdl.chooseFormat(info.formats, { quality: 'highest' });
+                    }
                 }
             } else {
                 // For other formats, get highest quality
@@ -111,19 +190,18 @@ async function downloadVideo(url, downloadDir, title, format = 'mp4', progressCa
             }
 
             if (!videoFormat) {
-                throw new Error('No suitable video format found');
+                throw new Error('No suitable video format found for this video');
             }
 
             console.log('Selected format:', videoFormat.qualityLabel || videoFormat.quality, videoFormat.container);
 
             const writeStream = fs.createWriteStream(filePath);
+            
+            // Create video stream with same options as getInfo
+            const streamOptions = getInfoOptions[0]; // Use the first working option
             const videoStream = ytdl(url, { 
                 format: videoFormat,
-                requestOptions: { 
-                    headers: { 
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    }
-                }
+                ...streamOptions
             });
 
             let downloadedBytes = 0;
@@ -141,7 +219,7 @@ async function downloadVideo(url, downloadDir, title, format = 'mp4', progressCa
             videoStream.on('error', (error) => {
                 console.error('Video stream error:', error);
                 fs.remove(filePath).catch(() => {});
-                reject(new Error(`Download failed: ${error.message}`));
+                reject(new Error(`Download stream failed: ${error.message}`));
             });
 
             writeStream.on('error', (error) => {
