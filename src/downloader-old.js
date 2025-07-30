@@ -1,5 +1,4 @@
 const ytdl = require('@distube/ytdl-core');
-const youtubedl = require('youtube-dl-exec');
 const fs = require('fs-extra');
 const path = require('path');
 const { sanitizeFilename } = require('./utils');
@@ -18,63 +17,14 @@ const agent = ytdl.createAgent([
     }
 ]);
 
-// Set environment variable to disable ytdl update check
-process.env.YTDL_NO_UPDATE = '1';
-
 /**
- * Get video information from YouTube URL using yt-dlp (more reliable)
- */
-async function getVideoInfoWithYtDlp(url) {
-    try {
-        console.log('🔄 Trying yt-dlp method...');
-        
-        const info = await youtubedl(url, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-            preferFreeFormats: true,
-            addHeader: [
-                'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ]
-        });
-
-        if (info && info.title) {
-            console.log('✅ yt-dlp succeeded:', info.title);
-            return {
-                title: info.title || 'Unknown Title',
-                author: {
-                    name: info.uploader || info.channel || 'Unknown Channel',
-                    channel_url: info.uploader_url || info.channel_url || ''
-                },
-                lengthSeconds: parseInt(info.duration) || 0,
-                description: info.description || '',
-                thumbnail: info.thumbnail || '',
-                viewCount: parseInt(info.view_count) || 0,
-                uploadDate: info.upload_date || ''
-            };
-        }
-        
-        return null;
-    } catch (error) {
-        console.log('❌ yt-dlp failed:', error.message);
-        return null;
-    }
-}
-
-/**
- * Get video information from YouTube URL with multiple fallback methods
+ * Get video information from YouTube URL
  */
 async function getVideoInfo(url) {
     try {
         console.log('Getting video info for:', url);
         
-        // Method 1: Try yt-dlp first (most reliable)
-        let info = await getVideoInfoWithYtDlp(url);
-        if (info) return info;
-        
-        console.log('🔄 Falling back to ytdl-core...');
-        
-        // Method 2: Try ytdl-core with multiple approaches
+        // Try multiple approaches with different configurations
         const attempts = [
             // Attempt 1: With custom agent and headers
             {
@@ -106,32 +56,23 @@ async function getVideoInfo(url) {
                         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
                     }
                 }
-            }
+            },
+            // Attempt 4: Basic attempt
+            {}
         ];
         
+        let info;
         let lastError;
         
         for (let i = 0; i < attempts.length; i++) {
             try {
-                console.log(`Attempt ${i + 1}/${attempts.length} with ytdl-core...`);
+                console.log(`Attempt ${i + 1}/${attempts.length}...`);
                 info = await ytdl.getInfo(url, attempts[i]);
-                console.log('✅ ytdl-core succeeded:', info.videoDetails.title);
-                
-                return {
-                    title: info.videoDetails.title || 'Unknown Title',
-                    author: {
-                        name: info.videoDetails.author?.name || 'Unknown Channel',
-                        channel_url: info.videoDetails.author?.channel_url || ''
-                    },
-                    lengthSeconds: parseInt(info.videoDetails.lengthSeconds) || 0,
-                    description: info.videoDetails.description || '',
-                    thumbnail: info.videoDetails.thumbnails?.[0]?.url || '',
-                    viewCount: parseInt(info.videoDetails.viewCount) || 0,
-                    uploadDate: info.videoDetails.uploadDate || ''
-                };
+                console.log('✅ Successfully got video info:', info.videoDetails.title);
+                break;
             } catch (error) {
                 lastError = error;
-                console.log(`❌ ytdl-core attempt ${i + 1} failed:`, error.message);
+                console.log(`❌ Attempt ${i + 1} failed:`, error.message);
                 
                 // Wait between attempts
                 if (i < attempts.length - 1) {
@@ -140,9 +81,23 @@ async function getVideoInfo(url) {
             }
         }
         
-        console.error('All methods failed. Last error:', lastError?.message);
-        return null;
+        if (!info) {
+            console.error('All attempts failed. Last error:', lastError?.message);
+            return null;
+        }
         
+        return {
+            title: info.videoDetails.title || 'Unknown Title',
+            author: {
+                name: info.videoDetails.author?.name || 'Unknown Channel',
+                channel_url: info.videoDetails.author?.channel_url || ''
+            },
+            lengthSeconds: parseInt(info.videoDetails.lengthSeconds) || 0,
+            description: info.videoDetails.description || '',
+            thumbnail: info.videoDetails.thumbnails?.[0]?.url || '',
+            viewCount: parseInt(info.videoDetails.viewCount) || 0,
+            uploadDate: info.videoDetails.uploadDate || ''
+        };
     } catch (error) {
         console.error('Critical error getting video info:', error.message);
         return null;
@@ -150,66 +105,12 @@ async function getVideoInfo(url) {
 }
 
 /**
- * Download video using yt-dlp (more reliable)
- */
-async function downloadVideoWithYtDlp(url, downloadDir, title, format = 'mp4') {
-    try {
-        console.log('🔄 Downloading with yt-dlp...');
-        
-        const filename = sanitizeFilename(title);
-        const outputTemplate = path.join(downloadDir, `${filename}.%(ext)s`);
-        
-        await fs.ensureDir(downloadDir);
-        
-        const options = {
-            output: outputTemplate,
-            format: format === 'mp4' ? 'best[ext=mp4]/best' : 'bestaudio[ext=m4a]/best',
-            noCheckCertificates: true,
-            noWarnings: true,
-            addHeader: [
-                'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ]
-        };
-        
-        await youtubedl(url, options);
-        
-        // Find the downloaded file
-        const files = await fs.readdir(downloadDir);
-        const downloadedFile = files.find(file => file.startsWith(filename));
-        
-        if (downloadedFile) {
-            const filePath = path.join(downloadDir, downloadedFile);
-            console.log('✅ yt-dlp download completed:', downloadedFile);
-            return filePath;
-        } else {
-            throw new Error('Downloaded file not found');
-        }
-        
-    } catch (error) {
-        console.log('❌ yt-dlp download failed:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Download video from YouTube with multiple fallback methods
+ * Download video from YouTube
  */
 async function downloadVideo(url, downloadDir, title, format = 'mp4', progressCallback = null) {
     return new Promise(async (resolve, reject) => {
         try {
             console.log('Starting download for:', title);
-            
-            // Method 1: Try yt-dlp first (most reliable)
-            try {
-                const filePath = await downloadVideoWithYtDlp(url, downloadDir, title, format);
-                resolve(filePath);
-                return;
-            } catch (error) {
-                console.log('yt-dlp failed, falling back to ytdl-core:', error.message);
-            }
-            
-            // Method 2: Fall back to ytdl-core
-            console.log('🔄 Falling back to ytdl-core download...');
             
             // Sanitize filename
             const filename = sanitizeFilename(title) + '.' + format;
@@ -350,22 +251,6 @@ async function validateYouTubeUrl(url) {
             return { valid: false, error: 'Invalid YouTube URL' };
         }
 
-        // Try yt-dlp first for validation
-        try {
-            const info = await youtubedl(url, {
-                dumpSingleJson: true,
-                noCheckCertificates: true,
-                noWarnings: true
-            });
-            
-            if (info && info.title) {
-                return { valid: true, info };
-            }
-        } catch (error) {
-            console.log('yt-dlp validation failed, trying ytdl-core...');
-        }
-
-        // Fall back to ytdl-core
         const info = await ytdl.getInfo(url);
         
         // Check if video is available
