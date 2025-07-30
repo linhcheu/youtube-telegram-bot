@@ -8,9 +8,15 @@
 const path = require('path');
 const fs = require('fs');
 
-// Check if .env file exists
+// Load environment variables (for local development)
+// In production, environment variables are set by the hosting platform
+require('dotenv').config();
+
+// Check if .env file exists (only for local development)
 const envPath = path.join(__dirname, '..', '.env');
-if (!fs.existsSync(envPath)) {
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (!isProduction && !fs.existsSync(envPath)) {
     console.error('❌ .env file not found!');
     console.log('📝 Please create a .env file with your Telegram bot token:');
     console.log('   TELEGRAM_BOT_TOKEN=your_bot_token_here');
@@ -18,9 +24,6 @@ if (!fs.existsSync(envPath)) {
     console.log('   DOWNLOAD_DIR=./downloads');
     process.exit(1);
 }
-
-// Load environment variables
-require('dotenv').config();
 
 // Check if bot token is provided
 if (!process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN === 'your_bot_token_here') {
