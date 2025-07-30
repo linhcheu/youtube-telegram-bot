@@ -1,5 +1,5 @@
-# Use Node.js 18 LTS Alpine for smaller size and better security
-FROM node:18-alpine
+# Use Node.js 20 LTS Alpine for better compatibility with ytdl-core
+FROM node:20-alpine
 
 # Install system dependencies for ffmpeg and python (for building native modules)
 RUN apk add --no-cache \
