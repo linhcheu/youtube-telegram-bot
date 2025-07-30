@@ -9,7 +9,10 @@ RUN apk add --no-cache \
     make \
     g++ \
     git \
-    && pip3 install --break-system-packages yt-dlp
+    curl \
+    ca-certificates \
+    && pip3 install --break-system-packages yt-dlp \
+    && yt-dlp --version
 
 # Set working directory
 WORKDIR /app
